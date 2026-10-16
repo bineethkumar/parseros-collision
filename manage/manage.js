@@ -1734,7 +1734,7 @@ async function staffView() {
         <td>${p.role === "none" ? html`<span class="p-badge p-badge--red">no access</span>` : html`<span class="p-badge ${p.role === "owner" ? "p-badge--dark" : ""}">${p.role}</span>`}${p.disabled ? html` <span class="p-badge p-badge--red">turned off</span>` : ""}</td>
         <td class="num">${p.role === "none" ? "" : html`${r ? money(r.hourly_cost_cents) : html`<span class="p-muted">not set</span>`}<br><button type="button" class="p-linkbtn" data-rate="${p.id}">${r ? "Change" : "Set rate"}</button>`}</td>
         <td>${p.id === me.user.id ? html`<span class="p-muted">you</span>` : html`
-          ${p.role === "staff" ? html`<button class="p-btn p-btn--sm" data-reset="${p.email}" data-name="${p.full_name || ""}">Reset link</button> ` : ""}
+          ${["owner", "staff"].includes(p.role) && !p.disabled ? html`<button class="p-btn p-btn--sm" data-reset="${p.email}" data-name="${p.full_name || ""}" data-role="${p.role}">Reset link</button> ` : ""}
           <button class="p-btn p-btn--sm ${p.disabled ? "" : "p-btn--danger"}" data-toggle="${p.id}" data-off="${p.disabled ? "1" : "0"}">${p.disabled ? "Turn on" : "Turn off"}</button>`}</td></tr>`; })}
       </tbody></table>
       <p class="p-hint">Staff can update cars, customers and photos, and log their own hours. Only owners see estimates, invoices, pay rates and money, and only owners manage staff.</p>
@@ -1754,7 +1754,7 @@ async function staffView() {
     const f = formData(e.target);
     busy(e.submitter, () => inviteFlow({ kind: "staff", email: f.email.toLowerCase(), fullName: f.fullName, role: f.role, sendEmail: wantsEmail(e.target) }));
   });
-  $$("[data-reset]").forEach((b) => b.addEventListener("click", () => busy(b, () => inviteFlow({ kind: "staff", email: b.dataset.reset, fullName: b.dataset.name, role: "staff" }))));
+  $$("[data-reset]").forEach((b) => b.addEventListener("click", () => busy(b, () => inviteFlow({ kind: "staff", email: b.dataset.reset, fullName: b.dataset.name, role: b.dataset.role }))));
   $$("[data-toggle]").forEach((b) => b.addEventListener("click", () => busy(b, async () => {
     const { error } = await sb.from("profiles").update({ disabled: b.dataset.off !== "1" }).eq("id", b.dataset.toggle);
     if (error) return toast(errMsg(error), "err");
