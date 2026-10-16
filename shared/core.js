@@ -114,6 +114,37 @@ export async function requestPasswordReset(email) {
   return j.message || "If that email has a login, a reset link is on its way.";
 }
 
+// A sign-in link that didn't work (expired, already used, or opened first by an email scanner)
+// comes back with an error in the address. Returns a friendly message for it, or null.
+export function linkProblem() {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const code = h.get("error_code") || "", desc = (h.get("error_description") || "").replace(/\+/g, " ");
+  if (!code && !desc && !h.get("error")) return null;
+  return /expired|invalid|otp/i.test(code + " " + desc) ? "This link has expired or was already used." : desc || "That sign-in link didn't work.";
+}
+// Shown on the sign-in page after a broken link: the person types their email and gets a fresh link.
+export function newLinkCard(message) {
+  return html`<div class="p-card p-form" id="newlink" style="border:2px solid var(--amber)">
+    <h2>${message}</h2>
+    <p class="p-hint">Sign-in links work once and expire after 24 hours. Some email programs open links by themselves to scan them, which can use them up.</p>
+    <label class="p-field"><span>Your email</span><input type="email" name="nlemail" autocomplete="email"></label>
+    <button class="p-btn p-btn--go" type="button" id="nlsend">Email me a new link</button>
+  </div>`;
+}
+export function wireNewLinkCard(root) {
+  const btn = root.querySelector("#nlsend");
+  if (!btn) return;
+  btn.addEventListener("click", () => busy(btn, async () => {
+    const email = root.querySelector("[name=nlemail]").value.trim();
+    if (!email) return toast("Type your email first.", "err");
+    try {
+      const msg = await requestPasswordReset(email);
+      root.querySelector("#newlink").innerHTML = String(html`<h2>Check your email</h2><p>${msg}</p>
+        <p class="p-hint">Open the newest email and click its link once. Not there in a few minutes? Check spam, or call us at 301-595-0888.</p>`);
+    } catch (err) { toast(errMsg(err), "err"); }
+  }));
+}
+
 export function toast(msg, kind = "ok") {
   let box = document.querySelector(".p-toasts");
   if (!box) { box = document.createElement("div"); box.className = "p-toasts"; box.setAttribute("role", "status"); document.body.appendChild(box); }

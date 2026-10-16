@@ -1,11 +1,12 @@
 // Parceros customer portal
 import {
   initSupabase, sb, html, raw, money, fdate, ftime, vehicleName, STATUSES, statusLabel, statusIndex,
-  SLOTS, slotLabel, totals, payMethodLabel, invoiceDue, paidSum, requestPasswordReset, toast, errMsg, formData, nn, busy, wireVin, uploadPhotos, photoUrls, photoGrid, router,
+  SLOTS, slotLabel, totals, payMethodLabel, invoiceDue, paidSum, requestPasswordReset, linkProblem, newLinkCard, wireNewLinkCard, toast, errMsg, formData, nn, busy, wireVin, uploadPhotos, photoUrls, photoGrid, router,
 } from "/shared/core.js";
 
 const app = document.getElementById("app");
 let me = null; // { user, profile, customer }
+let linkIssue = null; // a sign-in link that did not work: offer a new one on the sign-in page
 const LOGO = raw(`<svg viewBox="0 0 200 52" aria-hidden="true"><path d="M66 24 C92 6 140 3 170 21 L175 25 C146 11 100 11 66 24Z" fill="#fff"/><path d="M4 40 C38 26 110 23 186 30 L196 33 L190 34 C140 32 66 32 8 42Z" fill="#fff"/><path d="M10 45 C64 34 140 34 194 38" stroke="#3fae86" stroke-width="2.6" fill="none"/></svg>`);
 const $ = (s) => app.querySelector(s);
 const $$ = (s) => Array.from(app.querySelectorAll(s));
@@ -15,9 +16,12 @@ start();
 async function start() {
   try { await initSupabase(); }
   catch (e) { return setPage(html`<main class="p-main"><div class="p-card"><h2>Portal not ready</h2><p>${errMsg(e)}</p></div></main>`, false); }
-  const hashErr = new URLSearchParams(location.hash.replace(/^#/, "")).get("error_description");
+  linkIssue = linkProblem();
   await loadMe();
-  if (hashErr) { history.replaceState(null, "", location.pathname); toast(hashErr.replace(/\+/g, " "), "err"); }
+  if (linkIssue) {
+    history.replaceState(null, "", location.pathname);
+    if (me) { toast(`${linkIssue} You're already signed in.`, "err"); linkIssue = null; }
+  }
   if (new URLSearchParams(location.search).get("welcome") && me) history.replaceState(null, "", location.pathname + "#/set-password");
   const paidSession = new URLSearchParams(location.search).get("paid");
   if (paidSession && me) {
@@ -83,7 +87,7 @@ function setPage(content, withNav = true) {
 function loginView() {
   app.innerHTML = String(html`<div class="p-auth">
     <div class="p-auth__art"><div><p class="p-mono">Parceros Collision Center</p><h1>Where is <em>my car?</em></h1><p>Follow your repair, approve estimates and send us photos.</p></div></div>
-    <div class="p-auth__box"><form class="p-card p-form" id="login">
+    <div class="p-auth__box">${linkIssue ? newLinkCard(linkIssue) : ""}<form class="p-card p-form" id="login">
       <h2>Customer sign in</h2>
       <label class="p-field"><span>Email</span><input name="email" type="email" required autocomplete="username"></label>
       <label class="p-field"><span>Password</span><input name="password" type="password" required autocomplete="current-password"></label>
@@ -91,6 +95,7 @@ function loginView() {
       <button class="p-linkbtn" type="button" id="forgot">Forgot password?</button>
       <p class="p-hint">No login yet? We send you a link when we open your repair. Need an estimate? <a href="/request/">Request one here</a> or call <a href="tel:+13015950888">301-595-0888</a>.</p>
     </form></div></div>`);
+  wireNewLinkCard(app);
   $("#login").addEventListener("submit", (e) => {
     e.preventDefault();
     const f = formData(e.target);

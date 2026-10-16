@@ -1,13 +1,14 @@
 // Parceros shop management portal (owner + staff)
 import {
   initSupabase, sb, html, raw, esc, money, fdate, ftime, daysSince, vehicleName, STATUSES, statusLabel,
-  slotLabel, totals, PAY_METHODS, payMethodLabel, invoiceDue, paidSum, parseCents, CHECK_CATEGORIES, checkCategoryLabel, amountWords, requestPasswordReset, toast, errMsg, formData, nn, busy, wireVin, uploadPhotos, photoUrls, photoGrid, router, go,
+  slotLabel, totals, PAY_METHODS, payMethodLabel, invoiceDue, paidSum, parseCents, CHECK_CATEGORIES, checkCategoryLabel, amountWords, requestPasswordReset, linkProblem, newLinkCard, wireNewLinkCard, toast, errMsg, formData, nn, busy, wireVin, uploadPhotos, photoUrls, photoGrid, router, go,
 } from "/shared/core.js";
 import { zipWriter } from "/shared/zip.js";
 
 const app = document.getElementById("app");
 let me = null; // { user, profile }
 const isOwner = () => me?.profile?.role === "owner";
+let linkIssue = null; // a sign-in link that didn't work: offer a new one on the sign-in page
 const LOGO = raw(`<svg viewBox="0 0 200 52" aria-hidden="true"><path d="M66 24 C92 6 140 3 170 21 L175 25 C146 11 100 11 66 24Z" fill="#fff"/><path d="M4 40 C38 26 110 23 186 30 L196 33 L190 34 C140 32 66 32 8 42Z" fill="#fff"/><path d="M10 45 C64 34 140 34 194 38" stroke="#3fae86" stroke-width="2.6" fill="none"/></svg>`);
 
 // ---------------------------------------------------------------- boot
@@ -15,10 +16,13 @@ start();
 async function start() {
   try { await initSupabase(); }
   catch (e) { return setPage(html`<main class="p-main"><div class="p-card"><h2>Setup needed</h2><p>${errMsg(e)}</p></div></main>`); }
-  const hashErr = new URLSearchParams(location.hash.replace(/^#/, "")).get("error_description");
+  linkIssue = linkProblem();
   sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_OUT") { me = null; } });
   await loadMe();
-  if (hashErr) { history.replaceState(null, "", location.pathname); toast(hashErr.replace(/\+/g, " "), "err"); }
+  if (linkIssue) {
+    history.replaceState(null, "", location.pathname);
+    if (me) { toast(`${linkIssue} You're already signed in.`, "err"); linkIssue = null; }
+  }
   if (new URLSearchParams(location.search).get("welcome") && me) {
     history.replaceState(null, "", location.pathname + "#/set-password");
   }
@@ -127,7 +131,7 @@ function loginView() {
   app.innerHTML = String(html`
   <div class="p-auth">
     <div class="p-auth__art"><div><p class="p-mono">Parceros Collision Center</p><h1>Shop <em>management</em></h1><p>Customers, cars, estimates and the repair board.</p></div></div>
-    <div class="p-auth__box"><form class="p-card p-form" id="login" autocomplete="on">
+    <div class="p-auth__box">${linkIssue ? newLinkCard(linkIssue) : ""}<form class="p-card p-form" id="login" autocomplete="on">
       <h2>Staff sign in</h2>
       <label class="p-field"><span>Email</span><input name="email" type="email" required autocomplete="username"></label>
       <label class="p-field"><span>Password</span><input name="password" type="password" required autocomplete="current-password"></label>
@@ -136,6 +140,7 @@ function loginView() {
       <p class="p-hint">Customer? Use the <a href="/portal/">customer portal</a>.</p>
     </form></div>
   </div>`);
+  wireNewLinkCard(app);
   $("#login").addEventListener("submit", (e) => {
     e.preventDefault();
     const f = formData(e.target);

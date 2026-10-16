@@ -166,7 +166,7 @@ p { margin: 0 0 .8em; }
 .p-auth__art div { position: relative; }
 .p-auth__art h1 { font-size: clamp(2.6rem, 5vw, 4.2rem); }
 .p-auth__art em { font-style: normal; color: var(--teal); }
-.p-auth__box { display: flex; align-items: center; justify-content: center; padding: 40px 24px; background: var(--paper); }
+.p-auth__box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px 24px; background: var(--paper); }
 .p-auth__box .p-card { width: min(420px, 100%); padding: 30px; }
 
 /* toasts + dialog */
