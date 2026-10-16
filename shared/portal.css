@@ -82,6 +82,12 @@ p { margin: 0 0 .8em; }
 .p-table tr[data-href]:hover td { background: var(--paper); }
 .p-table .num { text-align: right; white-space: nowrap; }
 .p-table input, .p-table select { width: 100%; padding: 7px 8px; border: 1.5px solid var(--line); border-radius: 6px; font: inherit; }
+/* estimate line description: wraps, grows with the text, shown in capitals (saved in capitals too) */
+/* editable estimate: each line is a <tbody> of two rows (numbers, then description) */
+.p-lines .p-line tr:first-child td { border-bottom: 0; padding-bottom: 4px; }
+.p-lines .p-line tr:last-child td { padding-top: 0; }
+.p-lines .p-line tr:first-child td:nth-child(n+4) { padding-top: 18px; white-space: nowrap; }
+.p-table textarea.p-desc { width: 100%; min-height: 40px; padding: 7px 8px; border: 1.5px solid var(--line); border-radius: 6px; font: inherit; text-transform: uppercase; resize: vertical; field-sizing: content; }
 
 /* badges */
 .p-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-family: var(--mono); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; background: var(--concrete-2); color: var(--ink); white-space: nowrap; }

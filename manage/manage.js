@@ -256,6 +256,23 @@ async function customersView(q) {
   $("#add").addEventListener("click", () => customerDialog());
 }
 
+// Customer address in parts. Older customers may only have the single "address" field.
+function addressFields(c = {}) {
+  return html`<label class="p-field"><span>Street</span><input name="street" maxlength="200" autocomplete="street-address" value="${c.street || (!c.city && !c.zip ? c.address || "" : "")}"></label>
+    <div class="p-grid3">
+      <label class="p-field"><span>City</span><input name="city" maxlength="100" autocomplete="address-level2" value="${c.city || ""}"></label>
+      <label class="p-field"><span>State</span><input name="state" maxlength="40" autocomplete="address-level1" value="${c.state ?? "MD"}" style="text-transform:uppercase"></label>
+      <label class="p-field"><span>ZIP</span><input name="zip" maxlength="20" inputmode="numeric" autocomplete="postal-code" value="${c.zip || ""}"></label>
+    </div>`;
+}
+const addressRow = (f) => {
+  const any = f.street || f.city || f.zip; // the State box starts as "MD": only keep it with a real address
+  return { street: nn(f.street), city: nn(f.city), state: any ? nn((f.state || "").toUpperCase()) : null, zip: nn(f.zip) };
+};
+const addressText = (c) => (c?.street || c?.city || c?.zip
+  ? [c.street, [c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ")
+  : c?.address || "");
+
 function customerDialog() {
   const d = dialog(html`<form class="p-form" id="cform">
     <h2>New customer</h2>
@@ -264,14 +281,14 @@ function customerDialog() {
       <label class="p-field"><span>Phone</span><input name="phone" type="tel" maxlength="40"></label>
       <label class="p-field"><span>Email</span><input name="email" type="email" maxlength="200"></label>
     </div>
-    <label class="p-field"><span>Address</span><input name="address" maxlength="300"></label>
+    ${addressFields()}
     <div class="p-row"><button class="p-btn p-btn--go" type="submit">Save customer</button><button class="p-btn" type="button" data-close>Cancel</button></div>
   </form>`);
   d.querySelector("form").addEventListener("submit", (e) => {
     e.preventDefault();
     const f = formData(e.target);
     busy(e.submitter, async () => {
-      const { data, error } = await sb.from("customers").insert({ full_name: f.full_name, phone: nn(f.phone), email: nn(f.email?.toLowerCase()), address: nn(f.address) }).select("id").single();
+      const { data, error } = await sb.from("customers").insert({ full_name: f.full_name, phone: nn(f.phone), email: nn(f.email?.toLowerCase()), ...addressRow(f) }).select("id").single();
       if (error) return toast(errMsg(error), "err");
       d.close(); location.hash = "#/customers/" + data.id;
     });
@@ -290,6 +307,34 @@ function vehicleFields(v = {}) {
       <label class="p-field"><span>Color</span><input name="color" maxlength="40" value="${v.color || ""}"></label>
       <label class="p-field"><span>Plate</span><input name="plate" maxlength="20" value="${v.plate || ""}"></label>
     </div>`;
+}
+// Edit a vehicle (VIN look-up included); owners can also delete one that is on no repair order.
+function vehicleDialog(v, ros) {
+  const used = ros.filter((r) => r.vehicle_id === v.id).length;
+  const d = dialog(html`<form class="p-form"><h2>Edit vehicle</h2>${vehicleFields(v)}
+    <div class="p-row"><button class="p-btn p-btn--go" type="submit">Save vehicle</button>
+      ${isOwner() ? html`<button class="p-btn p-btn--danger" type="button" id="delveh">Delete</button>` : ""}
+      <button class="p-btn" type="button" data-close>Cancel</button></div>
+    ${used ? html`<p class="p-hint">This vehicle is on ${used} repair order${used > 1 ? "s" : ""}. Changes show there too.</p>` : ""}</form>`);
+  wireVin(d);
+  d.querySelector("form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = formData(e.target);
+    if (!f.vin && !f.make) return toast("Enter a VIN or at least the make.", "err");
+    const { customer_id, ...row } = vehicleRow(f, v.customer_id);
+    busy(e.submitter, async () => {
+      const { error } = await sb.from("vehicles").update(row).eq("id", v.id);
+      if (error) return toast(errMsg(error), "err");
+      d.close(); toast("Vehicle saved."); run();
+    });
+  });
+  d.querySelector("#delveh")?.addEventListener("click", (e) => busy(e.target, async () => {
+    if (used) return toast(`It's on ${used} repair order${used > 1 ? "s" : ""}, so it can't be deleted. Edit it instead.`, "err");
+    if (!confirm(`Delete the ${vehicleName(v)}?`)) return;
+    const { error } = await sb.from("vehicles").delete().eq("id", v.id);
+    if (error) return toast(errMsg(error), "err");
+    d.close(); toast("Vehicle deleted."); run();
+  }));
 }
 const vehicleRow = (f, customerId) => ({
   customer_id: customerId, vin: nn((f.vin || "").toUpperCase()), year: f.year ? Number(f.year) : null,
@@ -313,7 +358,8 @@ async function customerView(id) {
         ${ros.map((r) => html`<tr data-href="#/ro/${r.id}"><td><b>#${r.number}</b></td><td>${vehicleName(vmap[r.vehicle_id])}</td><td><span class="p-badge ${r.status === "ready" ? "p-badge--teal" : ""}">${statusLabel(r.status)}</span></td><td>${fdate(r.created_at)}</td></tr>`)}
       </tbody></table>` : html`<p class="p-muted">No repair orders yet.</p>`}</div>
       <div class="p-card"><h2>Vehicles</h2>
-        ${vehicles.length ? html`<table class="p-table"><thead><tr><th>Vehicle</th><th>VIN</th><th>Plate</th></tr></thead><tbody>${vehicles.map((v) => html`<tr><td><b>${vehicleName(v)}</b> ${v.trim_level || ""} ${v.color ? html`<span class="p-muted">· ${v.color}</span>` : ""}</td><td class="p-mono">${v.vin || ""}</td><td>${v.plate || ""}</td></tr>`)}</tbody></table>` : html`<p class="p-muted">No vehicles yet.</p>`}
+        ${vehicles.length ? html`<table class="p-table"><thead><tr><th>Vehicle</th><th>VIN</th><th>Plate</th><th></th></tr></thead><tbody>${vehicles.map((v) => html`<tr><td><b>${vehicleName(v)}</b> ${v.trim_level || ""} ${v.color ? html`<span class="p-muted">· ${v.color}</span>` : ""}</td><td class="p-mono">${v.vin || ""}</td><td>${v.plate || ""}</td>
+          <td class="p-actions"><button type="button" class="p-linkbtn" data-editveh="${v.id}">Edit</button></td></tr>`)}</tbody></table>` : html`<p class="p-muted">No vehicles yet.</p>`}
         <details style="margin-top:14px"><summary class="p-btn p-btn--sm" style="display:inline-flex">Add vehicle</summary>
           <form class="p-form" id="vform" style="margin-top:14px">${vehicleFields()}<button class="p-btn p-btn--go" type="submit">Save vehicle</button></form>
         </details>
@@ -324,7 +370,7 @@ async function customerView(id) {
         <label class="p-field"><span>Phone</span><input name="phone" type="tel" maxlength="40" value="${c.phone || ""}"></label>
         ${c.phone ? html`<p class="p-hint"><a href="tel:${c.phone}">Call</a> · <a href="sms:${c.phone}">Text</a></p>` : ""}
         <label class="p-field"><span>Email</span><input name="email" type="email" maxlength="200" value="${c.email || ""}"></label>
-        <label class="p-field"><span>Address</span><input name="address" maxlength="300" value="${c.address || ""}"></label>
+        ${addressFields(c)}
         <label class="p-field"><span>Shop notes (not shown to customer)</span><textarea name="notes" maxlength="4000">${c.notes || ""}</textarea></label>
         <label class="p-check"><input type="checkbox" name="email_updates" ${c.email_updates === false ? "" : raw("checked")}> Email updates (estimate, invoice, car received / ready, drop-off)</label>
         <p class="p-hint">Receipts and login emails are always sent.</p>
@@ -353,11 +399,12 @@ async function customerView(id) {
       toast("Vehicle added."); run();
     });
   });
+  $$("[data-editveh]").forEach((b) => b.addEventListener("click", () => vehicleDialog(vehicles.find((v) => v.id === b.dataset.editveh), ros)));
   $("#cedit").addEventListener("submit", (e) => {
     e.preventDefault();
     const f = formData(e.target);
     busy(e.submitter, async () => {
-      const { error } = await sb.from("customers").update({ full_name: f.full_name, phone: nn(f.phone), email: nn(f.email?.toLowerCase()), address: nn(f.address), notes: nn(f.notes), email_updates: f.email_updates === "on" }).eq("id", id);
+      const { error } = await sb.from("customers").update({ full_name: f.full_name, phone: nn(f.phone), email: nn(f.email?.toLowerCase()), ...addressRow(f), notes: nn(f.notes), email_updates: f.email_updates === "on" }).eq("id", id);
       if (error) return toast(errMsg(error), "err");
       toast("Saved."); run();
     });
@@ -661,8 +708,11 @@ function estimatesBlock(estimates, items, payments = [], cust = null) {
       return html`<details class="p-card" style="margin:12px 0 0;background:var(--paper)" ${editable || (e.kind === "invoice" && e.status === "unpaid") ? raw("open") : ""} data-est="${e.id}">
         <summary class="p-spread" style="cursor:pointer"><span><b>${e.kind === "invoice" ? "Invoice" : "Estimate"}</b> ${badge(e.status)} <span class="p-muted">${fdate(e.created_at)}</span></span><b>${money(t.total)}${e.kind === "invoice" && e.status === "unpaid" && paid ? html` <span class="p-muted" style="font-weight:500">· ${money(bal)} left</span>` : ""}</b></summary>
         <form class="p-form" data-estform="${e.id}" style="margin-top:12px">
-          <table class="p-table"><thead><tr><th style="width:150px">Type</th><th>Description</th><th style="width:80px">Qty</th><th style="width:120px">Unit $</th><th class="num" style="width:110px">Line</th>${editable ? html`<th></th>` : ""}</tr></thead>
-          <tbody data-rows>${its.map((i) => itemRow(i, editable))}</tbody></table>
+          ${editable
+            ? html`<table class="p-table p-lines" data-rows><thead><tr><th style="width:150px">Type</th><th style="width:90px">Qty</th><th style="width:120px">Unit $</th><th class="num">Line</th><th style="width:80px"></th></tr></thead>
+              ${its.map((i) => itemRow(i, true))}</table>`
+            : html`<table class="p-table"><thead><tr><th style="width:140px">Type</th><th>Description</th><th style="width:80px">Qty</th><th style="width:120px">Unit $</th><th class="num" style="width:110px">Line</th></tr></thead>
+              <tbody>${its.map((i) => itemRow(i, false))}</tbody></table>`}
           ${editable ? html`<button type="button" class="p-btn p-btn--sm" data-addrow>Add line</button>` : ""}
           <div class="p-grid2">
             <label class="p-field"><span>Tax rate % (on parts + paint)</span><input name="tax_rate" type="number" step="0.001" min="0" max="30" value="${e.tax_rate}" ${editable ? "" : raw("disabled")}></label>
@@ -696,19 +746,19 @@ function estimatesBlock(estimates, items, payments = [], cust = null) {
 function itemRow(i = {}, editable = true) {
   const line = Math.round(Number(i.qty || 1) * Number(i.unit_cents || 0));
   if (!editable) return html`<tr><td>${(TYPES.find((t) => t[0] === i.item_type) || ["", ""])[1]}</td><td>${i.description}</td><td>${i.qty}</td><td>${money(i.unit_cents)}</td><td class="num">${money(line)}</td></tr>`;
-  return html`<tr data-row>
+  // one line = two rows: the numbers on top, the description across the full width below
+  return html`<tbody data-row class="p-line"><tr>
     <td><select name="item_type">${TYPES.map(([k, l]) => html`<option value="${k}" ${k === (i.item_type || "part") ? raw("selected") : ""}>${l}</option>`)}</select></td>
-    <td><input name="description" maxlength="300" value="${i.description || ""}" required></td>
     <td><input name="qty" type="number" step="0.01" min="0.01" value="${i.qty || 1}" required></td>
     <td><input name="unit" type="number" step="0.01" min="0" value="${((i.unit_cents || 0) / 100).toFixed(2)}" required></td>
     <td class="num" data-line>${money(line)}</td>
     <td><button type="button" class="p-linkbtn" data-rmrow aria-label="Remove line">Remove</button></td>
-  </tr>`;
+  </tr><tr><td colspan="5"><textarea name="description" class="p-desc" maxlength="1000" rows="2" required placeholder="DESCRIPTION">${i.description || ""}</textarea></td></tr></tbody>`;
 }
 function readItems(form) {
-  return Array.from(form.querySelectorAll("tr[data-row]")).map((tr, k) => ({
+  return Array.from(form.querySelectorAll("[data-row]")).map((tr, k) => ({
     item_type: tr.querySelector("[name=item_type]").value,
-    description: tr.querySelector("[name=description]").value.trim(),
+    description: tr.querySelector("[name=description]").value.trim().toUpperCase(),
     qty: Number(tr.querySelector("[name=qty]").value || 0),
     unit_cents: Math.round(Number(tr.querySelector("[name=unit]").value || 0) * 100),
     sort: k,
@@ -726,14 +776,19 @@ function wireEstimates(ro, estimates, items) {
     const recalc = () => {
       if (est.status !== "draft") return;
       const its = readItems(form);
-      form.querySelectorAll("tr[data-row]").forEach((tr, k) => (tr.querySelector("[data-line]").textContent = money(Math.round(its[k].qty * its[k].unit_cents))));
+      form.querySelectorAll("[data-row]").forEach((tr, k) => (tr.querySelector("[data-line]").textContent = money(Math.round(its[k].qty * its[k].unit_cents))));
       const t = totals(its, form.querySelector("[name=tax_rate]").value);
       for (const k of ["taxable", "nontax", "tax", "total"]) form.querySelector(`[data-t=${k}]`).textContent = money(t[k]);
     };
     form.addEventListener("input", recalc);
+    // description boxes grow with the text (for browsers without CSS field-sizing)
+    const grow = (t) => { if (!t.offsetParent) return; t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }; // skip hidden (closed) panels
+    form.addEventListener("input", (e) => { if (e.target.matches(".p-desc")) grow(e.target); });
+    form.querySelectorAll(".p-desc").forEach(grow);
+    form.closest("details")?.addEventListener("toggle", () => form.querySelectorAll(".p-desc").forEach(grow));
     form.addEventListener("click", (e) => {
       if (e.target.matches("[data-addrow]")) { form.querySelector("[data-rows]").insertAdjacentHTML("beforeend", String(itemRow({}))); recalc(); }
-      if (e.target.matches("[data-rmrow]")) { e.target.closest("tr").remove(); recalc(); }
+      if (e.target.matches("[data-rmrow]")) { e.target.closest("[data-row]").remove(); recalc(); }
     });
     const save = async () => {
       const its = readItems(form);
@@ -1223,7 +1278,8 @@ function checkSavedDialog(r, { again = false } = {}) {
 function payeeDialog(p, onSaved) {
   const d = dialog(html`<form class="p-form"><h2>${p ? "Edit payee" : "New payee"}</h2>
     <label class="p-field"><span>Name on the check *</span><input name="name" required maxlength="120" value="${p?.name || ""}" placeholder="LKQ Corporation"></label>
-    <label class="p-field"><span>Mailing address (prints in the envelope window)</span><textarea name="address" maxlength="300" style="min-height:70px" placeholder="123 Main St&#10;Beltsville, MD 20705">${p?.address || ""}</textarea></label>
+    <p class="p-hint" style="margin:4px 0 0">Mailing address: prints in the envelope window.</p>
+    ${addressFields(p || {})}
     <div class="p-grid2">
       <label class="p-field"><span>Phone</span><input name="phone" type="tel" maxlength="40" value="${p?.phone || ""}"></label>
       ${p ? html`<label class="p-check" style="align-self:end"><input type="checkbox" name="active" ${p.active ? raw("checked") : ""}> Show in the payee list</label>` : ""}
@@ -1234,7 +1290,7 @@ function payeeDialog(p, onSaved) {
   d.querySelector("form").addEventListener("submit", (e) => {
     e.preventDefault();
     const f = formData(e.target);
-    const row = { name: f.name, address: nn(f.address), phone: nn(f.phone), notes: nn(f.notes), ...(p ? { active: f.active === "on" } : {}) };
+    const row = { name: f.name, ...addressRow(f), phone: nn(f.phone), notes: nn(f.notes), ...(p ? { active: f.active === "on" } : {}) };
     busy(e.submitter, async () => {
       const r = p ? await sb.from("payees").update(row).eq("id", p.id).select("*").single() : await sb.from("payees").insert(row).select("*").single();
       if (r.error) return toast(errMsg(r.error), "err");
@@ -1251,7 +1307,7 @@ async function payeesView() {
     <div class="p-head"><h1>Payees</h1><button class="p-btn p-btn--go" id="add">Add payee</button></div>
     <div class="p-card">${rows.length ? html`<table class="p-table"><thead><tr><th>Name</th><th>Address</th><th>Phone</th><th></th></tr></thead><tbody>
       ${rows.map((p) => html`<tr><td><b>${p.name}</b>${p.active ? "" : html` <span class="p-badge">hidden</span>`}${p.notes ? html`<br><span class="p-muted">${p.notes}</span>` : ""}</td>
-        <td style="white-space:pre-line">${p.address || ""}</td><td>${p.phone || ""}</td>
+        <td>${addressText(p)}</td><td>${p.phone || ""}</td>
         <td><button class="p-btn p-btn--sm" data-edit="${p.id}">Edit</button></td></tr>`)}
     </tbody></table>` : html`<div class="p-empty">No payees yet. Add the vendors, landlord and others you pay by check.</div>`}</div>
   </main>`);
@@ -1626,7 +1682,7 @@ function jobHtml({ r, cust, veh, who, d, n, files, roChecks, events, pays }) {
 <header><div><b>Parceros Collision Center</b><br>11322 Old Baltimore Pike, Beltsville, MD 20705<br>(301) 595-0888</div>
   <div class="r"><h1>Repair order #${r.number}</h1>${statusLabel(r.status)} · opened ${fdate(r.created_at)}</div></header>
 <section class="two">
-  <div><h2>Customer</h2><p><b>${cust?.full_name || ""}</b><br>${cust?.phone || ""}<br>${cust?.email || ""}<br>${cust?.address || ""}</p></div>
+  <div><h2>Customer</h2><p><b>${cust?.full_name || ""}</b><br>${cust?.phone || ""}<br>${cust?.email || ""}<br>${addressText(cust)}</p></div>
   <div><h2>Vehicle</h2><p><b>${vehicleName(veh)}</b>${veh?.trim_level ? " " + veh.trim_level : ""}${veh?.color ? " · " + veh.color : ""}${veh?.vin ? html`<br>VIN ${veh.vin}` : ""}${veh?.plate ? html`<br>Plate ${veh.plate}` : ""}</p>
     <p>${r.insurance_company ? html`Insurance: ${r.insurance_company}<br>` : ""}${r.claim_number ? html`Claim: ${r.claim_number}<br>` : ""}${r.assigned_staff_id ? html`Technician: ${personName(who[r.assigned_staff_id])}<br>` : ""}${r.promised_date ? html`Promised: ${fdate(r.promised_date)}` : ""}</p></div>
 </section>

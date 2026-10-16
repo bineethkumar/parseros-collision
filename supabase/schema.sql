@@ -683,7 +683,7 @@ create policy check_lines_owner_read on public.check_lines for select to authent
 -- {description, category, ro_id, amount_cents}; the check amount is their sum.
 create or replace function public.issue_check(p_bank uuid, p_payee uuid, p_date date, p_memo text, p_lines json, p_number int)
 returns json language plpgsql security definer set search_path = public as $$
-declare v_next int; v_num int; v_id uuid; v_total bigint := 0; v_name text; v_payee public.payees; v_line json; v_k int := 0;
+declare v_next int; v_num int; v_id uuid; v_total bigint := 0; v_name text; v_payee public.payees; v_line json; v_k int := 0; v_addr text;
 begin
   if not public.is_owner() then raise exception 'not allowed' using errcode = '42501'; end if;
   select * into v_payee from public.payees where id = p_payee;
@@ -706,9 +706,12 @@ begin
   end if;
   update public.bank_accounts set next_check_number = greatest(v_next, v_num + 1) where id = p_bank;
 
+  -- envelope window: "street" on one line, "city, ST zip" on the next (older payees: their single address)
+  v_addr := nullif(concat_ws(E'\n', nullif(trim(v_payee.street), ''),
+              nullif(trim(concat_ws(' ', nullif(concat_ws(', ', nullif(trim(v_payee.city), ''), nullif(trim(v_payee.state), '')), ''), nullif(trim(v_payee.zip), ''))), '')), '');
   select full_name into v_name from public.profiles where id = auth.uid();
   insert into public.checks (bank_account_id, check_number, payee_id, payee_name, payee_address, amount_cents, check_date, memo, created_by, created_by_name)
-  values (p_bank, v_num, v_payee.id, v_payee.name, v_payee.address, v_total, p_date,
+  values (p_bank, v_num, v_payee.id, v_payee.name, coalesce(v_addr, v_payee.address), v_total, p_date,
           nullif(left(trim(coalesce(p_memo, '')), 120), ''), auth.uid(), left(coalesce(v_name, 'Owner'), 120))
   returning id into v_id;
   for v_line in select * from json_array_elements(p_lines) loop
@@ -927,6 +930,21 @@ alter table public.email_log enable row level security;
 -- owner can read; only the server (service role) writes
 drop policy if exists email_log_owner_read on public.email_log;
 create policy email_log_owner_read on public.email_log for select to authenticated using (public.is_owner());
+
+-- ---------- customer address in parts, longer estimate lines ----------------
+-- The old single "address" column stays for older records; new entries use these four.
+alter table public.customers add column if not exists street text check (street is null or char_length(street) <= 200);
+alter table public.customers add column if not exists city   text check (city   is null or char_length(city)   <= 100);
+alter table public.customers add column if not exists state  text check (state  is null or char_length(state)  <= 40);
+alter table public.customers add column if not exists zip    text check (zip    is null or char_length(zip)    <= 20);
+-- Payees (checks) get the same four parts; the old single "address" stays for older payees.
+alter table public.payees add column if not exists street text check (street is null or char_length(street) <= 200);
+alter table public.payees add column if not exists city   text check (city   is null or char_length(city)   <= 100);
+alter table public.payees add column if not exists state  text check (state  is null or char_length(state)  <= 40);
+alter table public.payees add column if not exists zip    text check (zip    is null or char_length(zip)    <= 20);
+-- Estimate line descriptions: up to 1,000 characters (was 300).
+alter table public.estimate_items drop constraint if exists estimate_items_description_check;
+alter table public.estimate_items add constraint estimate_items_description_check check (char_length(description) between 1 and 1000);
 
 -- ---------- storage: private bucket for photos ------------------------------
 
