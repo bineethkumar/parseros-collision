@@ -38,6 +38,11 @@ html, body { margin: 0; padding: 0; background: #0b0f0e; }
 .g-nav__bays a:hover, .g-nav__bays a.is-active { background: rgba(63, 174, 134, .16); color: #fff; }
 .g-nav__call { display: inline-flex; align-items: center; gap: 10px; height: 44px; padding: 0 18px; border-radius: 999px; background: var(--teal); color: #06110d; font-family: var(--display); font-weight: 800; font-size: 1.15rem; letter-spacing: .04em; transition: background .2s; }
 .g-nav__call:hover { background: var(--teal-hi); }
+.g-nav__login { font-family: var(--mono); font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; padding: 9px 14px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 999px; white-space: nowrap; transition: border-color .2s, color .2s; }
+.g-nav__login:hover { border-color: var(--teal); color: var(--teal); }
+.g-cta-route--ghost { margin-left: 8px; background: transparent; color: #fff; border: 1.5px solid #fff; }
+.g-cta-route--ghost:hover { background: rgba(255, 255, 255, .12); }
+.g-foot a:hover { color: var(--teal); }
 .g-nav__dot { width: 9px; height: 9px; border-radius: 50%; background: #06110d; box-shadow: 0 0 0 0 rgba(6, 17, 13, .6); animation: g-pulse 1.8s infinite; }
 @keyframes g-pulse { 70% { box-shadow: 0 0 0 9px rgba(6, 17, 13, 0); } 100% { box-shadow: 0 0 0 0 rgba(6, 17, 13, 0); } }
 
@@ -212,6 +217,7 @@ html, body { margin: 0; padding: 0; background: #0b0f0e; }
   .g-wrap { padding: 0 18px; }
   .g-nav { height: 56px; top: 10px; }
   .g-nav__call { display: none; }
+  .g-nav__login { padding: 7px 11px; font-size: .68rem; }
   .g-logo svg { width: 48px; }
   .g-intro__shade { background: linear-gradient(0deg, rgba(11, 15, 14, .92) 0%, rgba(11, 15, 14, .5) 45%, rgba(11, 15, 14, .1) 75%); }
   .g-line { left: 18px; right: 18px; bottom: 12vh; }

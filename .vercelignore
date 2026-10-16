@@ -1,0 +1,8 @@
+supabase/
+*.md
+*.bat
+*.url
+dev-server.mjs
+.env*
+README.txt
+data/

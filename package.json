@@ -1,0 +1,14 @@
+{
+  "name": "parceros-collision-center",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "nodemailer": "^10.1.1"
+  }
+}
